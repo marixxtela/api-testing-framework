@@ -1,0 +1,22 @@
+{
+  "id": "a1b1c1d1-0000-4000-8000-000000000007",
+  "name": "GET /users/boom returns 500",
+  "priority": 3,
+  "request": {
+    "method": "GET",
+    "urlPath": "/users/boom"
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Mock-Source": "wiremock"
+    },
+    "jsonBody": {
+      "error": {
+        "code": "INTERNAL_ERROR",
+        "message": "simulated internal error for resilience testing"
+      }
+    }
+  }
+}

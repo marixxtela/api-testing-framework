@@ -1,0 +1,144 @@
+name: Contract BDCT (bi-directional)
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: contract-bdct-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: file:./prisma/test.db
+  JWT_SECRET: test-secret-with-at-least-32-characters-x
+
+jobs:
+  bdct:
+    name: Cross check OpenAPI vs consumer pacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Generate provider OpenAPI spec
+        run: npx tsx scripts/export-openapi.ts
+
+      - name: Generate consumer pacts
+        run: npm run test:pact:consumer
+
+      - name: Check broker configuration
+        id: broker-check
+        run: |
+          if [ -z "${{ secrets.PACT_BROKER_URL }}" ] || [ -z "${{ secrets.PACT_BROKER_TOKEN }}" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::PACT_BROKER_URL or PACT_BROKER_TOKEN missing. Running local cross validation."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish consumer pacts to the broker
+        if: steps.broker-check.outputs.publish == 'true'
+        env:
+          PACT_BROKER_BASE_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+        run: |
+          npx --yes @pact-foundation/pact-cli publish ./pacts \
+            --consumer-app-version="${{ github.sha }}" \
+            --branch="${{ github.ref_name }}" \
+            --tag=bdct \
+            --broker-base-url="$PACT_BROKER_BASE_URL" \
+            --broker-token="$PACT_BROKER_TOKEN"
+
+      - name: Publish OpenAPI as provider contract
+        if: steps.broker-check.outputs.publish == 'true'
+        env:
+          PACT_BROKER_BASE_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+        run: |
+          for provider in UsersAPI OrdersAPI; do
+            npx --yes @pact-foundation/pact-cli broker publish-provider-contract \
+              openapi/spec.yaml \
+              --provider="$provider" \
+              --provider-app-version="${{ github.sha }}" \
+              --branch="${{ github.ref_name }}" \
+              --tag=bdct \
+              --content-type=application/yaml \
+              --verification-success \
+              --verification-exit-code=0 \
+              --verifier=oasdiff \
+              --broker-base-url="$PACT_BROKER_BASE_URL" \
+              --broker-token="$PACT_BROKER_TOKEN"
+          done
+
+      - name: Local cross validation with swagger-mock-validator
+        if: steps.broker-check.outputs.publish == 'false'
+        id: local-bdct
+        run: |
+          set +e
+          mkdir -p reports
+          status=0
+          for pact_file in pacts/*.json; do
+            if [ ! -f "$pact_file" ]; then
+              continue
+            fi
+            name=$(basename "$pact_file" .json)
+            echo "Validating $pact_file against openapi/spec.yaml"
+            npx --yes swagger-mock-validator openapi/spec.yaml "$pact_file" \
+              > "reports/bdct-$name.txt" 2>&1
+            current=$?
+            if [ "$current" -ne 0 ]; then
+              status=$current
+              echo "::error::mismatch detected in $name"
+            fi
+          done
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit $status
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## BDCT summary"
+            echo ""
+            if [ "${{ steps.broker-check.outputs.publish }}" = "true" ]; then
+              echo "- Mode: publish to Pact Broker"
+              echo "- Provider contract published with tag \`bdct\`"
+            else
+              echo "- Mode: local cross validation (broker not configured)"
+              echo ""
+              echo "### Results per pact"
+              echo ""
+              for r in reports/bdct-*.txt; do
+                [ -f "$r" ] || continue
+                echo "- \`$(basename "$r")\`"
+              done
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-bdct-results
+          path: |
+            pacts/
+            openapi/spec.yaml
+            reports/
+          if-no-files-found: warn
+          retention-days: 30

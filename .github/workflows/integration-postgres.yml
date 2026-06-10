@@ -1,0 +1,45 @@
+name: Integration Postgres
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: integration-postgres-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-testcontainers:
+    name: Prisma against real Postgres
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      NODE_ENV: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Integration tests (Postgres via testcontainers)
+        # The npm script generates the Prisma client from schema.postgres.prisma
+        # before running, then restores the default SQLite client afterwards.
+        run: npm run test:integration:postgres
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-integration-postgres
+          path: reports/
+          if-no-files-found: ignore
+          retention-days: 14

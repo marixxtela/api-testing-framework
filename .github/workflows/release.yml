@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    name: Semantic release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Build the API
+        run: npm run api:build
+
+      - name: Export OpenAPI spec
+        run: npm run openapi:export
+
+      - name: Generate SBOM SPDX for the release
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: sbom.spdx.json
+          path: .
+          artifact-name: sbom.spdx.json
+
+      - name: Semantic release
+        id: semantic
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: npx semantic-release
+
+      - name: Attach SBOM to the published release
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || true)
+          if [ -z "$TAG" ]; then
+            echo "No tag found after semantic-release, skipping SBOM upload."
+            exit 0
+          fi
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release upload "$TAG" sbom.spdx.json --clobber
+          else
+            echo "Release $TAG was not published (no relevant changes), skipping."
+          fi

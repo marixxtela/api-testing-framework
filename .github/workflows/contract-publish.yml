@@ -1,0 +1,94 @@
+name: Contract publish (consumer)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ['**']
+
+concurrency:
+  group: contract-publish-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: file:./prisma/test.db
+  JWT_SECRET: test-secret-with-at-least-32-characters-x
+
+jobs:
+  consumer:
+    name: Generate pacts and publish to broker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Consumer tests
+        run: npm run test:pact:consumer
+
+      - name: Upload pacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pacts
+          path: pacts/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Check broker configuration
+        id: broker-check
+        run: |
+          if [ -z "${{ secrets.PACT_BROKER_URL }}" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::PACT_BROKER_URL not defined. Broker publish skipped."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish pacts to the broker
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.broker-check.outputs.publish == 'true'
+        env:
+          PACT_BROKER_BASE_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+        run: |
+          npx --yes @pact-foundation/pact-cli publish ./pacts \
+            --consumer-app-version="${{ github.sha }}" \
+            --branch="${{ github.ref_name }}" \
+            --broker-base-url="$PACT_BROKER_BASE_URL" \
+            --broker-token="$PACT_BROKER_TOKEN"
+
+      - name: Generate provider OpenAPI spec for BDCT
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.broker-check.outputs.publish == 'true'
+        run: npx tsx scripts/export-openapi.ts
+
+      - name: Publish OpenAPI as provider contract (BDCT)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.broker-check.outputs.publish == 'true'
+        continue-on-error: true
+        env:
+          PACT_BROKER_BASE_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+        run: |
+          for provider in UsersAPI OrdersAPI; do
+            npx --yes @pact-foundation/pact-cli broker publish-provider-contract \
+              openapi/spec.yaml \
+              --provider="$provider" \
+              --provider-app-version="${{ github.sha }}" \
+              --branch="${{ github.ref_name }}" \
+              --tag=bdct \
+              --content-type=application/yaml \
+              --verification-success \
+              --verification-exit-code=0 \
+              --verifier=oasdiff \
+              --broker-base-url="$PACT_BROKER_BASE_URL" \
+              --broker-token="$PACT_BROKER_TOKEN"
+          done

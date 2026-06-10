@@ -1,0 +1,45 @@
+{
+  "id": "e1f2a3b4-0000-4000-8000-0000000000b1",
+  "name": "Local",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "adminEmail",
+      "value": "ricardo.menezes@acme.test",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "adminPassword",
+      "value": "Adm.7421!checkout",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "orderId",
+      "value": "10000000-0000-0000-0000-000000000001",
+      "type": "default",
+      "enabled": true
+    }
+  ],
+  "_postman_variable_scope": "environment",
+  "_postman_exported_at": "2026-05-25T00:00:00.000Z",
+  "_postman_exported_using": "Postman/10.x"
+}

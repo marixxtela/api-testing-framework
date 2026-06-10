@@ -1,0 +1,75 @@
+name: Mutation testing
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+concurrency:
+  group: mutation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: file:./prisma/test.db
+  JWT_SECRET: test-secret-with-at-least-32-characters-x
+  RATE_LIMIT_MAX: 100
+  RATE_LIMIT_WINDOW: 1 minute
+
+jobs:
+  stryker:
+    name: Stryker mutation run
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Prisma migrate
+        run: npx prisma migrate deploy
+
+      - name: Stryker run
+        id: stryker
+        run: npm run test:mutation:ci
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: reports/mutation
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### Mutation testing"
+            echo ""
+            if [ -f reports/mutation/mutation.json ]; then
+              node -e "const r=require('./reports/mutation/mutation.json');\
+                const m=r.systemUnderTestMetrics||r.metrics||{};\
+                const score=(m.metrics&&m.metrics.mutationScore)||r.mutationScore||'n/a';\
+                console.log('Score: '+score);"
+            else
+              echo "No mutation.json produced. Check the Stryker step log."
+            fi
+            echo ""
+            echo "Artifact with full HTML: mutation-report"
+            echo ""
+            if [ "${{ steps.stryker.outcome }}" != "success" ]; then
+              echo "Stryker ended with failure or below the break threshold (60%). Job marked with continue-on-error to avoid blocking releases."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

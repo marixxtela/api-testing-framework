@@ -1,0 +1,93 @@
+# Full stack for local development and CI.
+# Start with: docker compose -f docker/docker-compose.yml up -d --build
+# Services:
+#   api         Fastify target API at http://localhost:3000
+#   wiremock    Mock server at http://localhost:8089
+#   pact-broker Broker UI at http://localhost:9292 (user: pact, password: pact)
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: api-testing-framework:local
+    container_name: atf-api
+    environment:
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      DATABASE_URL: file:/data/dev.db
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-use-32-chars-min}
+      JWT_EXPIRES_IN: 1h
+      RATE_LIMIT_MAX: 100
+      RATE_LIMIT_WINDOW: 1 minute
+      LOG_LEVEL: info
+    ports:
+      - '3000:3000'
+    volumes:
+      - api-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --quiet --spider http://127.0.0.1:3000/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+  wiremock:
+    image: wiremock/wiremock:3.9.1
+    container_name: atf-wiremock
+    ports:
+      - '8089:8080'
+    volumes:
+      - ../mocks/wiremock:/home/wiremock
+    command: ['--verbose', '--global-response-templating']
+    restart: unless-stopped
+
+  pact-postgres:
+    image: postgres:16-alpine
+    container_name: atf-pact-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pact
+    volumes:
+      - pact-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d pact']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  pact-broker:
+    image: pactfoundation/pact-broker:latest
+    container_name: atf-pact-broker
+    depends_on:
+      pact-postgres:
+        condition: service_healthy
+    environment:
+      PACT_BROKER_DATABASE_URL: postgres://postgres:postgres@pact-postgres/pact
+      PACT_BROKER_BASIC_AUTH_USERNAME: pact
+      PACT_BROKER_BASIC_AUTH_PASSWORD: pact
+      PACT_BROKER_PUBLIC_HEARTBEAT: 'true'
+      PACT_BROKER_LOG_LEVEL: INFO
+    ports:
+      - '9292:9292'
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:9292/diagnostic/status/heartbeat']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  api-data:
+    name: atf-api-data
+  pact-pg-data:
+    name: atf-pact-pg-data
+
+networks:
+  default:
+    name: atf-net
+    driver: bridge

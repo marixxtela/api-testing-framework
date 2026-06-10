@@ -1,0 +1,28 @@
+{
+  "id": "a1b1c1d1-0000-4000-8000-000000000005",
+  "name": "GET /users/rate-limited returns 429 with retry-after",
+  "priority": 3,
+  "request": {
+    "method": "GET",
+    "urlPath": "/users/rate-limited"
+  },
+  "response": {
+    "status": 429,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "Retry-After": "30",
+      "X-RateLimit-Limit": "100",
+      "X-RateLimit-Remaining": "0",
+      "X-Mock-Source": "wiremock"
+    },
+    "jsonBody": {
+      "error": {
+        "code": "RATE_LIMITED",
+        "message": "rate limit exceeded, try again in 30s",
+        "details": {
+          "retryAfterSeconds": 30
+        }
+      }
+    }
+  }
+}

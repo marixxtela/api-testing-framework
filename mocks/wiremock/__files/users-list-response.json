@@ -1,0 +1,42 @@
+{
+  "data": [
+    {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "email": "ricardo.menezes@acme.test",
+      "name": "Ricardo Menezes",
+      "role": "admin",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "metadata": {
+        "lastLogin": "2025-05-20T08:00:00.000Z",
+        "loginCount": 128
+      }
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000002",
+      "email": "mariana.castro@acme.test",
+      "name": "Mariana Castro",
+      "role": "user",
+      "createdAt": "2025-01-05T09:15:00.000Z",
+      "metadata": {
+        "lastLogin": "2025-05-19T22:10:00.000Z",
+        "loginCount": 57
+      }
+    },
+    {
+      "id": "00000000-0000-0000-0000-000000000003",
+      "email": "visitor@acme.test",
+      "name": "External Visitor",
+      "role": "guest",
+      "createdAt": "2025-01-10T11:45:00.000Z",
+      "metadata": {
+        "lastLogin": null,
+        "loginCount": 0
+      }
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "perPage": 10,
+    "total": 3
+  }
+}

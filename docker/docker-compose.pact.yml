@@ -1,0 +1,51 @@
+# Local broker to publish and verify pacts in development.
+# Start with: docker compose -f docker/docker-compose.pact.yml up -d
+# UI at http://localhost:9292 (user: pact, password: pact).
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pact-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: pact
+    volumes:
+      - pact-pg-data:/var/lib/postgresql/data
+    networks:
+      - pact-net
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d pact']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pact-broker:
+    image: pactfoundation/pact-broker:latest
+    container_name: pact-broker
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PACT_BROKER_DATABASE_URL: postgres://postgres:postgres@postgres/pact
+      PACT_BROKER_BASIC_AUTH_USERNAME: pact
+      PACT_BROKER_BASIC_AUTH_PASSWORD: pact
+      PACT_BROKER_PUBLIC_HEARTBEAT: 'true'
+      PACT_BROKER_LOG_LEVEL: INFO
+    ports:
+      - '9292:9292'
+    networks:
+      - pact-net
+    healthcheck:
+      test: ['CMD', 'curl', '-fsS', 'http://localhost:9292/diagnostic/status/heartbeat']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pact-pg-data:
+    name: pact-pg-data
+
+networks:
+  pact-net:
+    driver: bridge

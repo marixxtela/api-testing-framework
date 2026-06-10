@@ -1,0 +1,25 @@
+{
+  "id": "a1b1c1d1-0000-4000-8000-000000000003",
+  "name": "GET /users/:deadbeef returns 404",
+  "priority": 3,
+  "request": {
+    "method": "GET",
+    "urlPath": "/users/deadbeef-dead-beef-dead-beefdeadbeef"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Mock-Source": "wiremock"
+    },
+    "jsonBody": {
+      "error": {
+        "code": "USER_NOT_FOUND",
+        "message": "user not found",
+        "details": {
+          "id": "deadbeef-dead-beef-dead-beefdeadbeef"
+        }
+      }
+    }
+  }
+}

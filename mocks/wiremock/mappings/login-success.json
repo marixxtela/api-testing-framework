@@ -1,0 +1,46 @@
+{
+  "id": "a1b1c1d1-0000-4000-8000-000000000004",
+  "name": "POST /auth/login with admin returns a fake JWT token",
+  "priority": 3,
+  "request": {
+    "method": "POST",
+    "urlPath": "/auth/login",
+    "headers": {
+      "Content-Type": {
+        "contains": "application/json"
+      }
+    },
+    "bodyPatterns": [
+      {
+        "equalToJson": {
+          "email": "ricardo.menezes@acme.test",
+          "password": "Adm.7421!checkout"
+        },
+        "ignoreArrayOrder": true,
+        "ignoreExtraElements": true
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Mock-Source": "wiremock"
+    },
+    "jsonBody": {
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIwMDAwMDAwMC0wMDAwLTAwMDAtMDAwMC0wMDAwMDAwMDAwMDEiLCJlbWFpbCI6ImFkbWluQGV4YW1wbGUuY29tIiwicm9sZSI6ImFkbWluIiwiaWF0IjoxNzE2NjAwMDAwLCJleHAiOjE3MTY2ODY0MDB9.wiremock-fake-signature-not-cryptographically-valid",
+      "expiresIn": "1d",
+      "user": {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "email": "ricardo.menezes@acme.test",
+        "name": "Ricardo Menezes",
+        "role": "admin",
+        "createdAt": "2025-01-01T00:00:00.000Z",
+        "metadata": {
+          "lastLogin": "2025-05-20T08:00:00.000Z",
+          "loginCount": 128
+        }
+      }
+    }
+  }
+}

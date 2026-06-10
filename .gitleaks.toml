@@ -1,0 +1,34 @@
+# Custom Gitleaks config. Extends the default rules and adds an allowlist
+# for example secrets that live in documentation and fixtures.
+
+title = "gitleaks config api-testing-framework"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist for examples, fixtures, and synthetic secrets"
+
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)MANUAL\.md$''',
+  '''(^|/)README\.md$''',
+  '''(^|/)docs/.*\.md$''',
+  '''(^|/)tests/.*\.(ts|json)$''',
+  '''(^|/)mocks/.*''',
+  '''(^|/)postman/.*\.json$''',
+  '''(^|/)pacts/.*\.json$''',
+]
+
+regexes = [
+  '''test-only-secret-do-not-use-in-prod''',
+  '''test-secret-with-at-least-32-characters-x''',
+  '''eyJhbGciOiJIUzI1NiJ9\.payload\.signature''',
+]
+
+stopwords = [
+  "example",
+  "sample",
+  "fixture",
+  "dummy",
+]

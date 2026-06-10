@@ -1,0 +1,9 @@
+node_modules
+dist
+coverage
+pacts
+reports
+mocks/wiremock/__files
+*.lock
+package-lock.json
+MANUAL.md

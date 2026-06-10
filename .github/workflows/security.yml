@@ -1,0 +1,260 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
+
+jobs:
+  codeql:
+    name: CodeQL (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Init CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          config-file: ./.github/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: '/language:javascript-typescript'
+
+  dependency-review:
+    name: Dependency review (PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, SSPL-1.0
+          comment-summary-in-pr: on-failure
+
+  npm-audit:
+    name: npm audit (SCA)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Audit package signatures
+        run: npm audit signatures
+
+      - name: High-severity audit on production deps
+        id: audit
+        continue-on-error: true
+        run: |
+          set +e
+          npm audit --audit-level=high --omit=dev --json > npm-audit.json
+          STATUS=$?
+          echo "status=${STATUS}" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Audit summary
+        if: always()
+        run: |
+          {
+            echo "### npm audit (production, severity >= high)"
+            echo ""
+            if [ -f npm-audit.json ]; then
+              VULNS=$(node -e "const a=require('./npm-audit.json');const m=(a.metadata&&a.metadata.vulnerabilities)||{};console.log(['info','low','moderate','high','critical'].map(k=>k+':'+(m[k]||0)).join(' | '));")
+              echo "Vulnerabilities by severity: ${VULNS}"
+            else
+              echo "No report generated."
+            fi
+            if [ "${{ steps.audit.outputs.status }}" != "0" ]; then
+              echo ""
+              echo "Notice: npm audit returned non-zero. Manual triage recommended."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-audit
+          path: npm-audit.json
+          if-no-files-found: ignore
+          retention-days: 30
+
+  trivy-fs:
+    name: Trivy filesystem
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan filesystem
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-fs.sarif
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+
+  trivy-image:
+    name: Trivy container image
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build alpine runtime for scan
+        run: |
+          docker build \
+            -f docker/Dockerfile \
+            --target runtime \
+            -t api:scan \
+            .
+
+      - name: Scan image
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: image
+          image-ref: api:scan
+          severity: HIGH,CRITICAL
+          format: sarif
+          output: trivy-image.sarif
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+  semgrep:
+    name: Semgrep (SAST)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    container:
+      image: semgrep/semgrep:1.85.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Semgrep with curated rules
+        run: |
+          semgrep ci \
+            --config p/javascript \
+            --config p/typescript \
+            --config p/owasp-top-ten \
+            --config p/security-audit \
+            --sarif --output=semgrep.sarif \
+            --metrics=off || true
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  sbom:
+    name: SBOM SPDX
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate SBOM SPDX JSON
+        uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          output-file: sbom.spdx.json
+          path: .
+          artifact-name: sbom.spdx.json
+
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-spdx
+          path: sbom.spdx.json
+          retention-days: 90
+
+      - name: Vulnerability scan on SBOM (Grype)
+        uses: anchore/scan-action@v4
+        with:
+          sbom: sbom.spdx.json
+          severity-cutoff: high
+          fail-build: false
+          output-format: sarif
+
+  gitleaks:
+    name: Gitleaks (secret scanning)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: 'true'
+          GITLEAKS_ENABLE_SUMMARY: 'true'
+          GITLEAKS_CONFIG: .gitleaks.toml

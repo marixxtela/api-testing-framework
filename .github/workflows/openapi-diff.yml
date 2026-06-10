@@ -1,0 +1,149 @@
+name: OpenAPI diff (PR)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/api/**'
+      - 'openapi/**'
+      - 'scripts/export-openapi.ts'
+
+concurrency:
+  group: openapi-diff-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: test
+  DATABASE_URL: file:./prisma/test.db
+  JWT_SECRET: test-secret-with-at-least-32-characters-x
+
+jobs:
+  openapi-diff:
+    name: Generate diff and detect breaking changes
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout the PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Generate PR spec
+        run: |
+          npx tsx scripts/export-openapi.ts
+          mkdir -p openapi
+          mv openapi/spec.yaml openapi/spec.head.yaml
+
+      - name: Checkout base ref in worktree
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          git worktree add /tmp/base-worktree origin/${{ github.base_ref }}
+
+      - name: Install in the base worktree
+        working-directory: /tmp/base-worktree
+        run: npm ci
+
+      - name: Prisma generate in the base worktree
+        working-directory: /tmp/base-worktree
+        run: npx prisma generate
+
+      - name: Generate base spec
+        working-directory: /tmp/base-worktree
+        run: |
+          npx tsx scripts/export-openapi.ts
+          cp openapi/spec.yaml "$GITHUB_WORKSPACE/openapi/spec.base.yaml"
+
+      - name: Run OpenAPI diff
+        id: oasdiff
+        continue-on-error: true
+        run: |
+          docker run --rm \
+            -v "${{ github.workspace }}/openapi:/specs" \
+            tufin/oasdiff:latest diff \
+            /specs/spec.base.yaml /specs/spec.head.yaml \
+            -f markdown > diff.md || true
+          if [ ! -s diff.md ]; then
+            echo "No differences detected in the spec." > diff.md
+          fi
+
+      - name: Detect breaking changes
+        id: breaking
+        run: |
+          set +e
+          docker run --rm \
+            -v "${{ github.workspace }}/openapi:/specs" \
+            tufin/oasdiff:latest breaking \
+            /specs/spec.base.yaml /specs/spec.head.yaml \
+            -f markdown > breaking.md
+          code=$?
+          set -e
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          if [ -s breaking.md ]; then
+            echo "has_breaking=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_breaking=false" >> "$GITHUB_OUTPUT"
+            echo "No breaking changes detected." > breaking.md
+          fi
+
+      - name: Build comment body
+        run: |
+          {
+            echo "## OpenAPI diff"
+            echo ""
+            echo "Comparison between \`${{ github.base_ref }}\` and \`${{ github.head_ref }}\`."
+            echo ""
+            echo "### Differences"
+            echo ""
+            cat diff.md
+            echo ""
+            echo "### Breaking changes"
+            echo ""
+            cat breaking.md
+            echo ""
+            echo "_Use \`[allow-breaking]\` in the commit message to suppress the breaking change gate._"
+          } > pr-comment.md
+
+      - name: Comment on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: openapi-diff
+          path: pr-comment.md
+
+      - name: Fail if there is a breaking change without bypass
+        if: steps.breaking.outputs.has_breaking == 'true'
+        run: |
+          commit_msg=$(git log -1 --pretty=%B)
+          if echo "$commit_msg" | grep -q "\[allow-breaking\]"; then
+            echo "Bypass [allow-breaking] present in commit. Job stays green."
+            exit 0
+          fi
+          echo "Breaking changes detected and no bypass." >&2
+          cat breaking.md >&2
+          exit 1
+
+      - name: Upload diff artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-diff
+          path: |
+            diff.md
+            breaking.md
+            openapi/spec.base.yaml
+            openapi/spec.head.yaml
+          if-no-files-found: warn
+          retention-days: 14

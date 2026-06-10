@@ -1,0 +1,29 @@
+{
+  "id": "a1b1c1d1-0000-4000-8000-000000000006",
+  "name": "GET /users/slow simulates 3s latency",
+  "priority": 3,
+  "request": {
+    "method": "GET",
+    "urlPath": "/users/slow"
+  },
+  "response": {
+    "status": 200,
+    "fixedDelayMilliseconds": 3000,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Mock-Source": "wiremock",
+      "X-Mock-Delay-Ms": "3000"
+    },
+    "jsonBody": {
+      "id": "00000000-0000-0000-0000-0000000000aa",
+      "email": "slow.user@example.com",
+      "name": "Slow Response User",
+      "role": "user",
+      "createdAt": "2025-02-10T10:00:00.000Z",
+      "metadata": {
+        "lastLogin": null,
+        "loginCount": 0
+      }
+    }
+  }
+}

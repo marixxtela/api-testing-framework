@@ -1,0 +1,48 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "types": ["node", "vitest/globals"],
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": false,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@api/*": ["src/api/*"],
+      "@clients/*": ["src/clients/*"],
+      "@schemas/*": ["src/schemas/*"],
+      "@builders/*": ["src/builders/*"],
+      "@utils/*": ["src/utils/*"],
+      "@types/*": ["src/types/*"]
+    },
+    "outDir": "dist",
+    "rootDir": "."
+  },
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "scripts/**/*",
+    "prisma/**/*",
+    "vitest.config.ts",
+    "vitest.postgres.config.ts"
+  ],
+  "exclude": ["node_modules", "dist", "coverage", "pacts"]
+}

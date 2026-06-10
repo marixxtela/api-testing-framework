@@ -1,0 +1,27 @@
+{
+  "id": "a1b1c1d1-0000-4000-8000-000000000002",
+  "name": "GET /users/:fixedId returns a fixed user",
+  "priority": 4,
+  "request": {
+    "method": "GET",
+    "urlPath": "/users/00000000-0000-0000-0000-000000000099"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Mock-Source": "wiremock"
+    },
+    "jsonBody": {
+      "id": "00000000-0000-0000-0000-000000000099",
+      "email": "fixed.user@example.com",
+      "name": "Fixed Mock User",
+      "role": "user",
+      "createdAt": "2025-01-15T12:00:00.000Z",
+      "metadata": {
+        "lastLogin": "2025-05-01T09:30:00.000Z",
+        "loginCount": 42
+      }
+    }
+  }
+}

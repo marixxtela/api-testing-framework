@@ -1,0 +1,17 @@
+{
+  "id": "a1b1c1d1-0000-4000-8000-000000000001",
+  "name": "GET /users returns a paginated list of 3 users",
+  "priority": 5,
+  "request": {
+    "method": "GET",
+    "urlPath": "/users"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json; charset=utf-8",
+      "X-Mock-Source": "wiremock"
+    },
+    "bodyFileName": "users-list-response.json"
+  }
+}

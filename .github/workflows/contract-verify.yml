@@ -1,0 +1,98 @@
+name: Contract verify (provider)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ['**']
+  schedule:
+    - cron: '0 6 * * *'
+
+concurrency:
+  group: contract-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_ENV: production
+  DATABASE_URL: file:./prisma/dev.db
+  JWT_SECRET: ci-provider-secret-with-32-chars-min-xx
+  RATE_LIMIT_MAX: 1000
+  RATE_LIMIT_WINDOW: 1 minute
+
+jobs:
+  provider:
+    name: Verify provider against published pacts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Prisma migrate
+        run: npx prisma migrate deploy
+
+      - name: Seed
+        run: npm run db:seed
+
+      - name: Start API in the background
+        run: |
+          nohup npx tsx src/api/server.ts > api.log 2>&1 &
+          echo $! > api.pid
+
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:3000/health > /dev/null; then
+              echo "API ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not start" >&2
+          cat api.log
+          exit 1
+
+      - name: Provider verification
+        env:
+          PROVIDER_URL: http://localhost:3000
+          PACT_BROKER_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+          GIT_SHA: ${{ github.sha }}
+          GIT_BRANCH: ${{ github.ref_name }}
+        run: npm run test:pact:provider
+
+      - name: can-i-deploy
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          PACT_BROKER_BASE_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+        run: |
+          if [ -z "$PACT_BROKER_BASE_URL" ]; then
+            echo "::warning::Broker not configured, can-i-deploy skipped."
+            exit 0
+          fi
+          npx --yes @pact-foundation/pact-cli broker can-i-deploy \
+            --pacticipant FrontendApp \
+            --version "${{ github.sha }}" \
+            --to-environment production \
+            --broker-base-url "$PACT_BROKER_BASE_URL" \
+            --broker-token "$PACT_BROKER_TOKEN"
+
+      - name: API logs on failure
+        if: failure()
+        run: cat api.log || true
+
+      - name: Stop API
+        if: always()
+        run: |
+          if [ -f api.pid ]; then
+            kill "$(cat api.pid)" 2>/dev/null || true
+          fi

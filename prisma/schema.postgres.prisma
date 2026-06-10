@@ -1,0 +1,57 @@
+// Alternative schema for production with Postgres.
+// To use it: copy over schema.prisma or point PRISMA_SCHEMA_PATH to this file.
+//   cp prisma/schema.postgres.prisma prisma/schema.prisma
+//   DATABASE_URL=postgresql://user:pass@host:5432/db?schema=public npx prisma migrate deploy
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         String    @default("user")
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+  lastLoginAt  DateTime? @db.Timestamptz(6)
+  loginCount   Int       @default(0)
+  orders       Order[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Order {
+  id         String      @id @default(uuid()) @db.Uuid
+  userId     String      @db.Uuid
+  status     String      @default("pending")
+  totalCents Int
+  currency   String      @default("BRL") @db.Char(3)
+  createdAt  DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime    @updatedAt @db.Timestamptz(6)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items      OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id          String @id @default(uuid()) @db.Uuid
+  orderId     String @db.Uuid
+  sku         String
+  description String
+  quantity    Int
+  priceCents  Int
+  order       Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}

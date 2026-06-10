@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:20-alpine
+WORKDIR /app
+ENV CI=true \
+    NODE_ENV=test \
+    DATABASE_URL=file:./prisma/test.db
+
+RUN apk add --no-cache wget git python3 make g++
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+COPY . .
+
+RUN npx prisma generate \
+    && npx prisma migrate deploy
+
+CMD ["npm", "test"]
