@@ -1,3 +1,11 @@
+# Changelog
+
+## 1.0.0 (2026-06-10)
+
+### Features
+
+- initial project structure ([ec0afe1](https://github.com/marixxtela/api-testing-framework/commit/ec0afe17153b5d753de39f6d8da0b391e57ddd85))
+
 ## 0.1.0
 
 First publishable version of the framework.
