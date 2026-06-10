@@ -30,16 +30,16 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Init CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
           config-file: ./.github/codeql-config.yml
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Analyze
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: '/language:javascript-typescript'
 
@@ -137,7 +137,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-fs.sarif
           category: trivy-fs
@@ -174,7 +174,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload SARIF
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: trivy-image.sarif
           category: trivy-image
@@ -202,7 +202,7 @@ jobs:
 
       - name: Upload SARIF
         if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep.sarif
           category: semgrep
